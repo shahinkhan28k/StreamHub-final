@@ -57,6 +57,7 @@ export interface Video {
   published: boolean;
   tags: string[];
   isPremium?: boolean;
+  synced?: boolean;
 }
 
 export interface Comment {

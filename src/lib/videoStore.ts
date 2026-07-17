@@ -97,13 +97,18 @@ const DEFAULT_SEED_VIDEOS: Video[] = [
 function getLocalOnlyVideos(): Video[] {
   const localData = safeLocalStorage.getItem(LOCAL_VIDEOS_KEY);
   if (!localData) {
-    safeLocalStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(DEFAULT_SEED_VIDEOS));
-    return DEFAULT_SEED_VIDEOS;
+    const seedWithSync = DEFAULT_SEED_VIDEOS.map(v => ({ ...v, synced: true }));
+    safeLocalStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(seedWithSync));
+    return seedWithSync;
   }
   try {
-    return JSON.parse(localData);
+    const parsed = JSON.parse(localData) as Video[];
+    // Fallback: If any existing videos lack a synced status, we can treat them as synced by default
+    // so we don't accidentally resurrect them if they were actually deleted from Firestore.
+    return parsed.map(v => v.synced === undefined ? { ...v, synced: true } : v);
   } catch (e) {
-    return DEFAULT_SEED_VIDEOS;
+    const seedWithSync = DEFAULT_SEED_VIDEOS.map(v => ({ ...v, synced: true }));
+    return seedWithSync;
   }
 }
 
@@ -111,24 +116,30 @@ function getLocalOnlyVideos(): Video[] {
 export async function syncLocalOnlyVideosToFirestore(): Promise<number> {
   try {
     const locals = getLocalOnlyVideos();
-    if (locals.length === 0) return 0;
+    const localOnly = locals.filter(v => v.synced === false && !v.id.startsWith('seed-'));
+    if (localOnly.length === 0) return 0;
 
     const videosRef = collection(db, 'videos');
     const snapshot = await getDocs(query(videosRef));
     const firebaseIds = new Set(snapshot.docs.map(doc => doc.id));
 
     let uploadedCount = 0;
-    for (const localVideo of locals) {
-      // Skip seeding videos to prevent resurrection if deleted by admin
-      if (localVideo.id.startsWith('seed-')) {
-        continue;
-      }
+    const updatedLocals = [...locals];
+    for (const localVideo of localOnly) {
       if (!firebaseIds.has(localVideo.id)) {
         const docRef = doc(db, 'videos', localVideo.id);
-        await setDoc(docRef, localVideo, { merge: true });
+        const { synced, ...uploadData } = localVideo;
+        await setDoc(docRef, uploadData, { merge: true });
         uploadedCount++;
       }
+      
+      const idx = updatedLocals.findIndex(v => v.id === localVideo.id);
+      if (idx !== -1) {
+        updatedLocals[idx] = { ...updatedLocals[idx], synced: true };
+      }
     }
+    
+    safeLocalStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(updatedLocals));
     
     if (uploadedCount > 0) {
       console.log(`Successfully synced ${uploadedCount} local-only videos to Firestore.`);
@@ -145,21 +156,18 @@ export async function getStoredVideos(): Promise<Video[]> {
   try {
     const videosRef = collection(db, 'videos');
     const snapshot = await getDocs(query(videosRef));
-    const firebaseVideos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Video));
+    const firebaseVideos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), synced: true } as Video));
     
-    // Merge local-only videos so they are not deleted
     const locals = getLocalOnlyVideos();
     const firebaseIds = new Set(firebaseVideos.map(v => v.id));
     
-    // Filter out seed- videos that are not in Firestore to prevent their resurrection
-    const localOnly = locals.filter(v => !firebaseIds.has(v.id) && !v.id.startsWith('seed-'));
+    // Only keep local-only items that have never been synced to Firestore
+    const localOnly = locals.filter(v => v.synced === false && !firebaseIds.has(v.id) && !v.id.startsWith('seed-'));
     
     const mergedVideos = [...firebaseVideos, ...localOnly];
     
-    // Save local copy with merged list
     safeLocalStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(mergedVideos));
     
-    // Upload local-only items to Firestore in the background
     if (localOnly.length > 0) {
       syncLocalOnlyVideosToFirestore().catch(err => console.warn("Background sync error:", err));
     }
@@ -177,7 +185,7 @@ export async function getSingleStoredVideo(id: string): Promise<Video | null> {
     const docRef = doc(db, 'videos', id);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
-      return { id: docSnap.id, ...docSnap.data() } as Video;
+      return { id: docSnap.id, ...docSnap.data(), synced: true } as Video;
     }
   } catch (error) {
     console.warn(`Firestore get error for ID ${id}, searching local copy:`, error);
@@ -210,10 +218,24 @@ export async function saveStoredVideo(videoData: Partial<Video> & { id?: string 
     locked: !!videoData.locked,
     isPremium: videoData.isPremium !== undefined ? !!videoData.isPremium : false,
     published: videoData.published !== undefined ? !!videoData.published : true,
-    tags: videoData.tags || []
+    tags: videoData.tags || [],
+    synced: false
   };
 
-  // Update local storage
+  // Try updating Firestore
+  let isSynced = false;
+  try {
+    const docRef = doc(db, 'videos', id);
+    const { synced, ...uploadData } = finalVideo;
+    await setDoc(docRef, uploadData, { merge: true });
+    isSynced = true;
+    console.log("Firestore successfully synchronized.");
+  } catch (error) {
+    console.warn("Firestore write skipped, stored in local storage:", error);
+  }
+
+  finalVideo.synced = isSynced;
+
   let updatedLocals: Video[];
   if (isNew) {
     updatedLocals = [finalVideo, ...locals];
@@ -221,15 +243,6 @@ export async function saveStoredVideo(videoData: Partial<Video> & { id?: string 
     updatedLocals = locals.map(v => v.id === id ? finalVideo : v);
   }
   safeLocalStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(updatedLocals));
-
-  // Try updating Firestore in background
-  try {
-    const docRef = doc(db, 'videos', id);
-    await setDoc(docRef, finalVideo, { merge: true });
-    console.log("Firestore successfully synchronized.");
-  } catch (error) {
-    console.warn("Firestore write skipped, stored in local storage:", error);
-  }
 
   return finalVideo;
 }
@@ -261,22 +274,18 @@ export function subscribeStoredVideos(
       query(videosRef),
       (snapshot) => {
         const firebaseVideos = snapshot.docs.map(
-          (doc) => ({ id: doc.id, ...doc.data() } as Video)
+          (doc) => ({ id: doc.id, ...doc.data(), synced: true } as Video)
         );
         
-        // Merge local-only videos so they are not deleted on state change
         const locals = getLocalOnlyVideos();
         const firebaseIds = new Set(firebaseVideos.map(v => v.id));
         
-        // Filter out seed- videos that are not in Firestore to prevent their resurrection
-        const localOnly = locals.filter(v => !firebaseIds.has(v.id) && !v.id.startsWith('seed-'));
+        const localOnly = locals.filter(v => v.synced === false && !firebaseIds.has(v.id) && !v.id.startsWith('seed-'));
         
         const mergedVideos = [...firebaseVideos, ...localOnly];
         
-        // Update local cache
         safeLocalStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(mergedVideos));
         
-        // Background sync
         if (localOnly.length > 0) {
           syncLocalOnlyVideosToFirestore().catch(err => console.warn("Background sync error:", err));
         }

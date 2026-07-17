@@ -514,11 +514,25 @@ export default function VideoDetail() {
     setIsPlaying(false);
     setCurrentTime(0);
     setProgress(0);
-    setDuration(0);
+    
+    // Pre-populate duration from video.duration to prevent showing 00:00 on initial load
+    if (video && video.duration) {
+      const parts = video.duration.split(':').map(Number);
+      if (parts.length === 2 && !parts.some(isNaN)) {
+        setDuration(parts[0] * 60 + parts[1]);
+      } else if (parts.length === 3 && !parts.some(isNaN)) {
+        setDuration(parts[0] * 3600 + parts[1] * 60 + parts[2]);
+      } else {
+        setDuration(0);
+      }
+    } else {
+      setDuration(0);
+    }
+
     if (videoRef.current) {
       videoRef.current.currentTime = 0;
     }
-  }, [id, resolvedVideoSrc]);
+  }, [id, resolvedVideoSrc, video?.duration]);
 
   useEffect(() => {
     let active = true;
@@ -789,9 +803,11 @@ export default function VideoDetail() {
           });
         } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
           videoElement.src = resolvedVideoSrc;
+          videoElement.load();
         }
       } else {
         videoElement.src = resolvedVideoSrc;
+        videoElement.load();
       }
     }
 
