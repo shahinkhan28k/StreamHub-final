@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Remix: StreamHub",
+  "description": "A modern, responsive video streaming platform with admin controls, authentication, and premium UI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,247 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html, body {
+    max-width: 100%;
+    overflow-x: hidden;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Prevent blue flash selection highlights on mobile tap */
+  a, button, [role="button"], select, input, textarea {
+    -webkit-tap-highlight-color: transparent;
+    outline: none;
+  }
+
+  body {
+    @apply antialiased text-neutral-200 bg-neutral-950;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-neutral-950;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-neutral-800 rounded-full hover:bg-neutral-700 transition-colors;
+  }
+
+  /* Selection Color */
+  ::selection {
+    @apply bg-rose-600/30 text-white;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-white/5 backdrop-blur-md border border-white/10;
+  }
+  
+  .premium-shadow {
+    box-shadow: 0 0 50px -12px rgba(0, 0, 0, 0.5);
+  }
+  
+  .premium-gradient {
+    @apply bg-gradient-to-br from-rose-600 to-rose-700;
+  }
+}
+
+/* Animations */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out forwards;
+}
+
+/* 
+  Hardware acceleration and anti-jitter overrides.
+  This forces browsers to use GPU-based layers during scaling and translations, 
+  preventing sub-pixel wiggling, shaking, or flickering when hovering on elements 
+  such as video cards, buttons, or custom glass panels.
+*/
+.group,
+.transition,
+.transition-all,
+.transition-transform,
+[class*="transition-"],
+[class*="hover:"],
+img {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  -webkit-transform-style: preserve-3d;
+  transform-style: preserve-3d;
+  image-rendering: -webkit-optimize-contrast;
+}
+
+.transform-gpu,
+[class*="hover:-translate"],
+[class*="group-hover:scale"],
+[class*="hover:scale"] {
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+/* 
+  Responsive Ad Renderer styling.
+  Ensures banners/iframes/scripts from 3rd party networks are beautifully 
+  centered and dynamically scaled on mobile screens, avoiding overflows.
+*/
+.ad-renderer-container {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: center !important;
+  text-align: center !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  overflow: hidden !important;
+}
+
+.ad-renderer-container iframe,
+.ad-renderer-container img,
+.ad-renderer-container ins,
+.ad-renderer-container a,
+.ad-renderer-container svg,
+.ad-renderer-container embed {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* For fixed-width elements like 728x90 iframes on small screens */
+@media (max-width: 768px) {
+  .ad-renderer-container iframe,
+  .ad-renderer-container ins,
+  .ad-renderer-container embed {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+}
+
+/* Light Mode overrides */
+.light-theme {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+.light-theme .bg-neutral-950 {
+  background-color: #f8fafc !important;
+}
+.light-theme .bg-neutral-900 {
+  background-color: #ffffff !important;
+}
+.light-theme .bg-neutral-800 {
+  background-color: #f1f5f9 !important;
+}
+.light-theme .bg-neutral-950\/80,
+.light-theme .bg-neutral-950\/60,
+.light-theme .bg-neutral-950\/50,
+.light-theme .bg-neutral-950\/20,
+.light-theme .bg-neutral-900\/95,
+.light-theme .bg-neutral-900\/60,
+.light-theme .bg-neutral-900\/50,
+.light-theme .bg-neutral-900\/20 {
+  background-color: rgba(255, 255, 255, 0.85) !important;
+}
+.light-theme .bg-neutral-950\/30,
+.light-theme .bg-neutral-900\/30 {
+  background-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.light-theme .text-white {
+  color: #0f172a !important;
+}
+.light-theme .text-neutral-100 {
+  color: #1e293b !important;
+}
+.light-theme .text-neutral-200 {
+  color: #334155 !important;
+}
+.light-theme .text-neutral-300 {
+  color: #475569 !important;
+}
+.light-theme .text-neutral-400 {
+  color: #64748b !important;
+}
+.light-theme .text-neutral-500 {
+  color: #94a3b8 !important;
+}
+
+.light-theme .border-white\/5,
+.light-theme .border-white\/10 {
+  border-color: #cbd5e1 !important;
+}
+.light-theme .divide-white\/5 {
+  border-color: #cbd5e1 !important;
+}
+
+.light-theme .placeholder-neutral-500::placeholder {
+  color: #94a3b8 !important;
+}
+.light-theme input::placeholder,
+.light-theme textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Input, select and textarea adjustments for readability */
+.light-theme input,
+.light-theme textarea,
+.light-theme select {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light-theme .hover\:bg-neutral-800:hover {
+  background-color: #e2e8f0 !important;
+}
+.light-theme .hover\:bg-neutral-900:hover {
+  background-color: #f1f5f9 !important;
+}
+.light-theme .hover\:text-white:hover {
+  color: #0f172a !important;
+}
+
+.light-theme .glass {
+  background-color: rgba(255, 255, 255, 0.7) !important;
+  backdrop-filter: blur(12px) !important;
+  border-color: rgba(15, 23, 42, 0.08) !important;
+}
+
+.light-theme .premium-shadow {
+  box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.1) !important;
+}
+
+.light-theme ::-webkit-scrollbar-track {
+  background-color: #f8fafc !important;
+}
+.light-theme ::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1 !important;
+}
+.light-theme ::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8 !important;
+}
+
+
+
+

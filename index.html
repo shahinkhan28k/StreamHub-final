@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Deshi Hubx - Premium Collection</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+    
+    <!-- SEO Optimization Meta Tags -->
+    <meta name="description" content="Welcome to Deshi Hubx - Premium Collection. Stream high-quality videos, enjoy fast playback with zero buffer, and explore our custom-curated entertainment collection." />
+    <meta name="keywords" content="Deshi Hubx, DeshiHubx, Deshi Hub, Deshi videos, Premium Collection, high quality streaming, responsive video player, stream hub" />
+    <meta name="author" content="Deshi Hubx" />
+    <meta name="robots" content="index, follow" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://deshihubx.com/" />
+    <meta property="og:title" content="Deshi Hubx - Premium Collection" />
+    <meta property="og:description" content="Welcome to Deshi Hubx - Premium Collection. Stream high-quality videos, enjoy fast playback with zero buffer, and explore our custom-curated entertainment collection." />
+    <meta property="og:image" content="/favicon.png" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:title" content="Deshi Hubx - Premium Collection" />
+    <meta property="twitter:description" content="Welcome to Deshi Hubx - Premium Collection. Stream high-quality videos, enjoy fast playback with zero buffer, and explore our custom-curated entertainment collection." />
+    <meta property="twitter:image" content="/favicon.png" />
+
+    <!-- Global Error Shield to Suppress Third-Party CORS Script Errors -->
+    <script>
+      // 1. Capture-phase listener: intercepts errors before other listeners can register them
+      window.addEventListener('error', function (event) {
+        if (!event) return;
+        
+        const message = event.message || (event.error && event.error.message) || '';
+        const filename = event.filename || '';
+        const msgStr = String(message);
+        const urlStr = String(filename);
+        
+        // Identify CORS "Script error." and ad networks (ads, adsterra, hilltop, monetag, etc.)
+        const isAdOrCorsError = msgStr === 'Script error.' || 
+                                msgStr.includes('Script error') ||
+                                msgStr.includes('Unexpected token') ||
+                                urlStr.includes('ads') || 
+                                urlStr.includes('adsterra') || 
+                                urlStr.includes('hilltop') || 
+                                urlStr.includes('monetag') ||
+                                urlStr.includes('onclick');
+                                
+        if (isAdOrCorsError) {
+          console.warn('Interrupted and silenced external script exception in capture-phase:', msgStr, 'at', urlStr);
+          event.stopImmediatePropagation();
+          event.preventDefault();
+        }
+      }, true); // Use true for capture phase
+
+      // 2. Window.onerror bubble-phase fallback
+      window.onerror = function (message, url, line, column, error) {
+        const msgStr = String(message || '');
+        const urlStr = String(url || '');
+        if (
+          msgStr === 'Script error.' || 
+          msgStr.includes('Script error') ||
+          msgStr.includes('Unexpected token') ||
+          urlStr.includes('ads') || 
+          urlStr.includes('adsterra') || 
+          urlStr.includes('hilltop') || 
+          urlStr.includes('monetag') ||
+          urlStr.includes('onclick')
+        ) {
+          console.warn('Silenced external/ads script exception in window.onerror:', message, 'at', url);
+          return true; // Stop event bubbling
+        }
+        return false;
+      };
+
+      // 3. Unhandled promise rejections shield
+      window.addEventListener('unhandledrejection', function (event) {
+        if (event && event.reason) {
+          const reasonStr = String(event.reason.message || event.reason || '');
+          if (
+            reasonStr === 'Script error.' || 
+            reasonStr.includes('Script error') ||
+            reasonStr.includes('Unexpected token')
+          ) {
+            console.warn('Silenced unhandled promise rejection:', event.reason);
+            event.stopImmediatePropagation();
+            event.preventDefault();
+          }
+        }
+      }, true);
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

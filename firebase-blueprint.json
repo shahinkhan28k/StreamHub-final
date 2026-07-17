@@ -1,0 +1,174 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique user ID" },
+        "email": { "type": "string", "description": "User email address" },
+        "name": { "type": "string", "description": "Display name" },
+        "avatar": { "type": "string", "description": "Avatar URL" },
+        "role": { "type": "string", "enum": ["user", "admin"], "description": "User role" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role", "createdAt"]
+    },
+    "Video": {
+      "title": "Video",
+      "description": "Video content details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "thumbnail": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "views": { "type": "number" },
+        "duration": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "featured": { "type": "boolean" },
+        "locked": { "type": "boolean" },
+        "published": { "type": "boolean" },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["title", "videoUrl", "categoryId", "published"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Video category",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "icon": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "User comment on a video",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "videoId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userAvatar": { "type": "string" },
+        "text": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["videoId", "userId", "text", "createdAt"]
+    },
+    "WatchHistory": {
+      "title": "Watch History",
+      "description": "User's watch progress",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "videoId": { "type": "string" },
+        "lastWatched": { "type": "string", "format": "date-time" },
+        "progress": { "type": "number" }
+      },
+      "required": ["userId", "videoId", "lastWatched"]
+    },
+    "Favorite": {
+      "title": "Favorite",
+      "description": "User favorited video",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "videoId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "videoId", "createdAt"]
+    },
+    "Setting": {
+      "title": "Setting",
+      "description": "Site-wide settings",
+      "type": "object",
+      "properties": {
+        "siteName": { "type": "string" },
+        "logo": { "type": "string" },
+        "primaryColor": { "type": "string" },
+        "footerText": { "type": "string" },
+        "contactEmail": { "type": "string" },
+        "socialLinks": { "type": "object" },
+        "featureToggles": { "type": "object" }
+      }
+    },
+    "PaymentSetting": {
+      "title": "Payment Setting",
+      "description": "Admin settings for mobile banking gateways",
+      "type": "object",
+      "properties": {
+        "bkashNumber": { "type": "string" },
+        "bkashType": { "type": "string", "enum": ["personal", "agent"] },
+        "nagadNumber": { "type": "string" },
+        "nagadType": { "type": "string", "enum": ["personal", "agent"] },
+        "rocketNumber": { "type": "string" },
+        "rocketType": { "type": "string", "enum": ["personal", "agent"] }
+      }
+    },
+    "SubscriptionRequest": {
+      "title": "Subscription Request",
+      "description": "User requests for subscription upgrade",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "plan": { "type": "string", "enum": ["monthly", "yearly"] },
+        "amount": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["bkash", "nagad", "rocket"] },
+        "senderNumber": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "rejectionReason": { "type": "string" }
+      },
+      "required": ["userId", "userEmail", "plan", "amount", "paymentMethod", "senderNumber", "transactionId", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/videos/{videoId}": {
+      "schema": "Video",
+      "description": "Video metadata"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Video categories"
+    },
+    "/videos/{videoId}/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Comments for a video"
+    },
+    "/users/{userId}/history/{historyId}": {
+      "schema": "WatchHistory",
+      "description": "User watch history"
+    },
+    "/users/{userId}/favorites/{favoriteId}": {
+      "schema": "Favorite",
+      "description": "User favorites"
+    },
+    "/settings/general": {
+      "schema": "Setting",
+      "description": "General settings"
+    },
+    "/settings/payment": {
+      "schema": "PaymentSetting",
+      "description": "Payment gateway numbers and types"
+    },
+    "/subscriptionRequests/{requestId}": {
+      "schema": "SubscriptionRequest",
+      "description": "User subscription payment verification requests"
+    }
+  }
+}
