@@ -1,18 +1,33 @@
-import { doc, setDoc, collection, getDocs, deleteDoc, query, where, limit } from 'firebase/firestore';
+import { doc, setDoc, collection, getDocs, getDoc, query, where, limit } from 'firebase/firestore';
 import { db } from './firebase';
 
 export async function seedDatabase() {
+  const seedStatusRef = doc(db, 'settings', 'seed_status');
+  try {
+    const statusSnap = await getDoc(seedStatusRef);
+    if (statusSnap.exists() && statusSnap.data()?.seeded) {
+      console.log("Database already seeded (or explicitly cleared). Skipping seed.");
+      return;
+    }
+  } catch (err) {
+    console.warn("Could not check seed status from Firestore:", err);
+  }
+
   const videosRef = collection(db, 'videos');
   // Check for any published video to see if we need to seed
   const snapshot = await getDocs(query(videosRef, where('published', '==', true), limit(1)));
   
   if (!snapshot.empty) {
     console.log("Database already has videos. Skipping seed.");
+    try {
+      await setDoc(seedStatusRef, { seeded: true }, { merge: true });
+    } catch (e) {}
     return;
   }
 
   const sampleVideos = [
     {
+      id: 'seed-cyberpunk',
       title: "Neon City - Cyberpunk Atmosphere",
       description: "Explore the neon-lit streets of a futuristic city in this immersive cinematic experience. High definition visuals and ambient soundtrack.",
       thumbnail: "https://images.unsplash.com/photo-1605810230434-7631ac76ec81?w=800&auto=format&fit=crop&q=60",
@@ -27,6 +42,7 @@ export async function seedDatabase() {
       tags: ["cyberpunk", "cinematic", "scifi"]
     },
     {
+      id: 'seed-nature',
       title: "Great Mountain Peaks - 4K Drone Footage",
       description: "Breathtaking views of the world's most beautiful mountain ranges. Shot in 4K resolution with professional drone equipment.",
       thumbnail: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=800&auto=format&fit=crop&q=60",
@@ -41,6 +57,7 @@ export async function seedDatabase() {
       tags: ["nature", "drone", "4k"]
     },
     {
+      id: 'seed-urban',
       title: "Urban Exploring - Abandoned Factory",
       description: "Join us as we explore a massive abandoned factory from the 1920s. Discover hidden artifacts and historical secrets.",
       thumbnail: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=60",
@@ -55,6 +72,7 @@ export async function seedDatabase() {
       tags: ["exploration", "urban", "history"]
     },
     {
+      id: 'seed-masterclass',
       title: "Premium Masterclass: Advanced Video Production",
       description: "Unlock professional techniques for high-end video editing and color grading. Available for premium members only.",
       thumbnail: "https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?w=800&auto=format&fit=crop&q=60",
@@ -72,9 +90,13 @@ export async function seedDatabase() {
   ];
 
   for (const video of sampleVideos) {
-    const newDoc = doc(collection(db, 'videos'));
+    const newDoc = doc(db, 'videos', video.id);
     await setDoc(newDoc, video);
   }
+
+  try {
+    await setDoc(seedStatusRef, { seeded: true });
+  } catch (e) {}
 
   console.log("Database seeded successfully!");
 }

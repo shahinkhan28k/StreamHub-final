@@ -119,6 +119,10 @@ export async function syncLocalOnlyVideosToFirestore(): Promise<number> {
 
     let uploadedCount = 0;
     for (const localVideo of locals) {
+      // Skip seeding videos to prevent resurrection if deleted by admin
+      if (localVideo.id.startsWith('seed-')) {
+        continue;
+      }
       if (!firebaseIds.has(localVideo.id)) {
         const docRef = doc(db, 'videos', localVideo.id);
         await setDoc(docRef, localVideo, { merge: true });
@@ -141,30 +145,30 @@ export async function getStoredVideos(): Promise<Video[]> {
   try {
     const videosRef = collection(db, 'videos');
     const snapshot = await getDocs(query(videosRef));
-    if (!snapshot.empty) {
-      const firebaseVideos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Video));
-      
-      // Merge local-only videos so they are not deleted
-      const locals = getLocalOnlyVideos();
-      const firebaseIds = new Set(firebaseVideos.map(v => v.id));
-      const localOnly = locals.filter(v => !firebaseIds.has(v.id));
-      
-      const mergedVideos = [...firebaseVideos, ...localOnly];
-      
-      // Save local copy with merged list
-      safeLocalStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(mergedVideos));
-      
-      // Upload local-only items to Firestore in the background
-      if (localOnly.length > 0) {
-        syncLocalOnlyVideosToFirestore().catch(err => console.warn("Background sync error:", err));
-      }
-      
-      return mergedVideos;
+    const firebaseVideos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Video));
+    
+    // Merge local-only videos so they are not deleted
+    const locals = getLocalOnlyVideos();
+    const firebaseIds = new Set(firebaseVideos.map(v => v.id));
+    
+    // Filter out seed- videos that are not in Firestore to prevent their resurrection
+    const localOnly = locals.filter(v => !firebaseIds.has(v.id) && !v.id.startsWith('seed-'));
+    
+    const mergedVideos = [...firebaseVideos, ...localOnly];
+    
+    // Save local copy with merged list
+    safeLocalStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(mergedVideos));
+    
+    // Upload local-only items to Firestore in the background
+    if (localOnly.length > 0) {
+      syncLocalOnlyVideosToFirestore().catch(err => console.warn("Background sync error:", err));
     }
+    
+    return mergedVideos;
   } catch (error) {
     console.warn("Firestore unavailable, falling back to local database:", error);
+    return getLocalOnlyVideos();
   }
-  return getLocalOnlyVideos();
 }
 
 // Get single video
@@ -256,30 +260,28 @@ export function subscribeStoredVideos(
     const unsubscribe = onSnapshot(
       query(videosRef),
       (snapshot) => {
-        if (!snapshot.empty) {
-          const firebaseVideos = snapshot.docs.map(
-            (doc) => ({ id: doc.id, ...doc.data() } as Video)
-          );
-          
-          // Merge local-only videos so they are not deleted on state change
-          const locals = getLocalOnlyVideos();
-          const firebaseIds = new Set(firebaseVideos.map(v => v.id));
-          const localOnly = locals.filter(v => !firebaseIds.has(v.id));
-          
-          const mergedVideos = [...firebaseVideos, ...localOnly];
-          
-          // Update local cache
-          safeLocalStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(mergedVideos));
-          
-          // Background sync
-          if (localOnly.length > 0) {
-            syncLocalOnlyVideosToFirestore().catch(err => console.warn("Background sync error:", err));
-          }
-          
-          onUpdate(mergedVideos);
-        } else {
-          onUpdate(getLocalOnlyVideos());
+        const firebaseVideos = snapshot.docs.map(
+          (doc) => ({ id: doc.id, ...doc.data() } as Video)
+        );
+        
+        // Merge local-only videos so they are not deleted on state change
+        const locals = getLocalOnlyVideos();
+        const firebaseIds = new Set(firebaseVideos.map(v => v.id));
+        
+        // Filter out seed- videos that are not in Firestore to prevent their resurrection
+        const localOnly = locals.filter(v => !firebaseIds.has(v.id) && !v.id.startsWith('seed-'));
+        
+        const mergedVideos = [...firebaseVideos, ...localOnly];
+        
+        // Update local cache
+        safeLocalStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(mergedVideos));
+        
+        // Background sync
+        if (localOnly.length > 0) {
+          syncLocalOnlyVideosToFirestore().catch(err => console.warn("Background sync error:", err));
         }
+        
+        onUpdate(mergedVideos);
       },
       (error) => {
         console.warn("Firestore subscription error, falling back to local database:", error);
