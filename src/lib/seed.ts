@@ -25,6 +25,17 @@ export async function seedDatabase() {
     return;
   }
 
+  // To prevent loops when users don't have write permissions or are offline,
+  // we first write the seed_status. Only if we successfully mark it as seeded,
+  // we proceed with creating the seed videos.
+  try {
+    await setDoc(seedStatusRef, { seeded: true });
+    console.log("Seeding status marked successfully. Proceeding with database seed.");
+  } catch (err) {
+    console.warn("Failed to mark seed status, aborting database seed to prevent recreation loop:", err);
+    return;
+  }
+
   const sampleVideos = [
     {
       id: 'seed-cyberpunk',
@@ -93,10 +104,6 @@ export async function seedDatabase() {
     const newDoc = doc(db, 'videos', video.id);
     await setDoc(newDoc, video);
   }
-
-  try {
-    await setDoc(seedStatusRef, { seeded: true });
-  } catch (e) {}
 
   console.log("Database seeded successfully!");
 }
