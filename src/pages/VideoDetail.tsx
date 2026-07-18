@@ -1228,8 +1228,26 @@ export default function VideoDetail() {
               ) : (
                 <div className="w-full h-full relative bg-neutral-950 flex items-center justify-center">
                   {processedUrl ? (
-                    <div className="w-full h-full relative group">
-                      <video
+                    processedUrl.startsWith('indexeddb://') && !resolvedVideoSrc ? (
+                      <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center p-6 text-center select-none z-10 border border-white/5 rounded-2xl">
+                        <div className="w-14 h-14 bg-red-500/10 border border-red-500/20 text-red-500 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-red-500/5">
+                          <ShieldAlert className="w-7 h-7" />
+                        </div>
+                        <h3 className="text-base font-bold text-white mb-2">ভিডিওটি প্লে করা সম্ভব হচ্ছে না (Video Playback Unavailable)</h3>
+                        <p className="text-neutral-400 text-xs max-w-md leading-relaxed mb-4">
+                          এই ভিডিও ফাইলটি আপনার ডিভাইসে সংরক্ষিত নেই। এটি আপলোড করার সময় <span className="text-rose-400 font-bold">Local Browser Storage</span> অপশন ব্যবহার করা হয়েছে, যার ফলে এটি শুধুমাত্র আপলোডকারীর ফোনেই প্লে হবে।
+                        </p>
+                        <div className="bg-neutral-900 border border-white/5 rounded-xl p-3.5 max-w-md text-left text-[11px] text-amber-500/90 leading-relaxed mb-5">
+                          <span className="font-bold block mb-1">💡 এডমিনের জন্য সমাধান (How to Fix):</span>
+                          এডমিন প্যানেলে গিয়ে এই ভিডিওটি ডিলিট করুন এবং নতুন করে যুক্ত করার সময় <span className="font-bold text-white underline">Firebase Cloud Storage</span> সিলেক্ট করে আপলোড করুন, অথবা সরাসরি ইউটিউব/গুগল ড্রাইভ/ড্রপবক্স লিংক পেস্ট করুন। তাহলে সব ডিভাইস থেকে সবাই প্লে করতে পারবে!
+                        </div>
+                        <Link to="/" className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-full text-xs font-bold transition-all shadow-lg shadow-rose-600/20">
+                          হোম পেজে ফিরে যান (Go Back Home)
+                        </Link>
+                      </div>
+                    ) : (
+                      <div className="w-full h-full relative group">
+                        <video
                         key={video?.id || 'video-player'}
                         ref={videoRef}
                         src={isM3U8 ? undefined : (resolvedVideoSrc || undefined)}
@@ -1406,12 +1424,13 @@ export default function VideoDetail() {
                         </Link>
                       </div>
                     </div>
-                  ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-neutral-900 text-neutral-500">
-                      <Play className="w-12 h-12 mb-4 opacity-20" />
-                      <p>Video source not available</p>
-                    </div>
-                  )}
+                  )
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-neutral-900 text-neutral-500">
+                    <Play className="w-12 h-12 mb-4 opacity-20" />
+                    <p>Video source not available</p>
+                  </div>
+                )}
                 </div>
               )}
             </div>

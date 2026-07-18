@@ -181,14 +181,14 @@ export default function VideoManagement() {
       featured: false,
       locked: false,
       isPremium: false,
-      uploadStorageType: 'local'
+      uploadStorageType: 'server'
     }
   });
 
   const videoFileRef = useRef<HTMLInputElement>(null);
   const thumbFileRef = useRef<HTMLInputElement>(null);
   const videoSourceType = watch('videoSourceType') || 'url';
-  const uploadStorageType = watch('uploadStorageType') || 'local';
+  const uploadStorageType = watch('uploadStorageType') || 'server';
   const watchedCategoryId = watch('categoryId');
   const currentCategoryObj = getCategoriesFromMenu().find((c: any) => c.id === watchedCategoryId);
   const hasSubmenus = currentCategoryObj && currentCategoryObj.subMenus && currentCategoryObj.subMenus.length > 0;
@@ -490,14 +490,14 @@ export default function VideoManagement() {
       const storageRef = ref(storage, `${path}/${Date.now()}_${name}`);
       const uploadTask = uploadBytesResumable(storageRef, file);
 
-      // Add a watchdog timer (e.g. 10 seconds) to prevent infinite hanging at 0%
+      // Add a watchdog timer (e.g. 120 seconds) to prevent infinite hanging at 0%
       let lastBytesTransferred = 0;
       let lastProgressTime = Date.now();
 
       const watchdogInterval = setInterval(() => {
         const now = Date.now();
-        // If 10 seconds have passed without any bytes transferred, cancel the task and reject
-        if (now - lastProgressTime > 10000 && lastBytesTransferred === 0) {
+        // If 120 seconds have passed without any bytes transferred, cancel the task and reject
+        if (now - lastProgressTime > 120000 && lastBytesTransferred === 0) {
           clearInterval(watchdogInterval);
           try {
             uploadTask.cancel();
@@ -534,6 +534,93 @@ export default function VideoManagement() {
           }
         }
       );
+    });
+  };
+
+  const uploadToPixeldrain = async (file: File | Blob, pathKey: 'videos' | 'thumbnails' = 'videos'): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('anonymous', 'true');
+
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) {
+          const percentComplete = (event.loaded / event.total) * 100;
+          setProgress((prev) => ({ ...prev, [pathKey]: Math.round(percentComplete) }));
+        }
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const response = JSON.parse(xhr.responseText);
+            if (response.success && response.id) {
+              resolve(`https://pixeldrain.com/api/file/${response.id}`);
+            } else {
+              reject(new Error(response.message || "Pixeldrain upload failed."));
+            }
+          } catch (e) {
+            reject(new Error("Failed to parse Pixeldrain response."));
+          }
+        } else {
+          reject(new Error(`Pixeldrain server returned status ${xhr.status}: ${xhr.statusText}`));
+        }
+      });
+
+      xhr.addEventListener('error', () => {
+        reject(new Error("Network error during Pixeldrain upload. Please check connection."));
+      });
+
+      xhr.addEventListener('abort', () => {
+        reject(new Error("Upload aborted."));
+      });
+
+      xhr.open('POST', 'https://pixeldrain.com/api/file');
+      xhr.send(formData);
+    });
+  };
+
+  const uploadToServer = async (file: File | Blob, pathKey: 'videos' | 'thumbnails' = 'videos'): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const formData = new FormData();
+      formData.append('file', file);
+
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) {
+          const percentComplete = (event.loaded / event.total) * 100;
+          setProgress((prev) => ({ ...prev, [pathKey]: Math.round(percentComplete) }));
+        }
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const response = JSON.parse(xhr.responseText);
+            if (response.success && response.url) {
+              resolve(response.url);
+            } else {
+              reject(new Error(response.error || "Server upload failed."));
+            }
+          } catch (e) {
+            reject(new Error("Failed to parse server response."));
+          }
+        } else {
+          reject(new Error(`Server returned status ${xhr.status}: ${xhr.statusText}`));
+        }
+      });
+
+      xhr.addEventListener('error', () => {
+        reject(new Error("Network error during server upload. Please check connection."));
+      });
+
+      xhr.addEventListener('abort', () => {
+        reject(new Error("Upload aborted."));
+      });
+
+      xhr.open('POST', '/api/upload');
+      xhr.send(formData);
     });
   };
 
@@ -598,7 +685,41 @@ export default function VideoManagement() {
         // Handle Video File Upload
         const videoFile = videoFileRef.current?.files?.[0];
         if (videoFile) {
-          if (data.uploadStorageType === 'firebase') {
+          if (data.uploadStorageType === 'server') {
+            try {
+              videoUrl = await uploadToServer(videoFile, 'videos');
+            } catch (srvErr: any) {
+              console.warn("Server upload failed. Falling back to local IndexedDB.", srvErr);
+              try {
+                const fileKey = `video-${Date.now()}-${videoFile.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                videoUrl = await storeLocalMedia(fileKey, videoFile);
+                alert(
+                  "ℹ️ হোস্টিং সার্ভার স্টোরেজে আপলোড ব্যর্থ হওয়ায় ভিডিওটি আপনার ব্রাউজারের লোকাল স্টোরেজে (IndexedDB) সেভ করা হয়েছে!\n\n" +
+                  "⚠️ সতর্কবার্তা: এটি শুধুমাত্র আপনার নিজের ফোনে প্লে হবে। অন্য ডিভাইস থেকে দেখতে চাইলে আবার চেষ্টা করুন।"
+                );
+              } catch (idbErr) {
+                console.error("Local IndexedDB store failed:", idbErr);
+                throw new Error(`STORAGE_VIDEO_FAILED: Server upload and local IndexedDB backup both failed: ${srvErr?.message || ''}`);
+              }
+            }
+          } else if (data.uploadStorageType === 'pixeldrain') {
+            try {
+              videoUrl = await uploadToPixeldrain(videoFile, 'videos');
+            } catch (pdErr: any) {
+              console.warn("Pixeldrain upload failed. Falling back to local IndexedDB.", pdErr);
+              try {
+                const fileKey = `video-${Date.now()}-${videoFile.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                videoUrl = await storeLocalMedia(fileKey, videoFile);
+                alert(
+                  "ℹ️ Pixeldrain ক্লাউড আপলোড ব্যর্থ হওয়ায় ভিডিওটি আপনার ব্রাউজারের লোকাল স্টোরেজে (IndexedDB) সেভ করা হয়েছে!\n\n" +
+                  "⚠️ সতর্কবার্তা: এটি শুধুমাত্র আপনার নিজের ফোনে প্লে হবে। অন্য ডিভাইস থেকে দেখতে চাইলে ডিরেক্ট লিংক দিন বা আবার চেষ্টা করুন।"
+                );
+              } catch (idbErr) {
+                console.error("Local IndexedDB store failed:", idbErr);
+                throw new Error(`STORAGE_VIDEO_FAILED: Pixeldrain upload and local IndexedDB backup both failed: ${pdErr?.message || ''}`);
+              }
+            }
+          } else if (data.uploadStorageType === 'firebase') {
             try {
               videoUrl = await uploadFile(videoFile, 'videos');
             } catch (uploadErr: any) {
@@ -608,7 +729,7 @@ export default function VideoManagement() {
                 videoUrl = await storeLocalMedia(fileKey, videoFile);
                 alert(
                   "ℹ️ ফায়ারবেস স্টোরেজ ব্লক বা নিষ্ক্রিয় থাকায় ভিডিও ফাইলটি আপনার ব্রাউজারের লোকাল স্টোরেজে (IndexedDB) সফলভাবে সেভ করা হয়েছে!\n\n" +
-                  "⚠️ সতর্কবার্তা: এটি আপনার নিজস্ব ব্রাউজারে সুন্দরভাবে চলবে। তবে অন্যান্য ভিজিটররা এই ভিডিওটি দেখতে পারবে না, কারণ ফাইলটি তাদের ব্রাউজারে নেই। সাধারণ ভিজিটরদের দেখার জন্য দয়া করে গুগল ড্রাইভ, ড্রপবক্স, বা ইউটিউব ভিডিওর সরাসরি লিংক পেস্ট করে যুক্ত করুন!"
+                  "⚠️ সতর্কবার্তা: এটি আপনার নিজস্ব ব্রাউজারে সুন্দরভাবে চলবে। তবে অন্যান্য ভিজিটররা এই ভিডিওটি দেখতে পারবে না, কারণ ফাইলটি তাদের ব্রাউজারে নেই। সাধারণ ভিজিটরদের দেখার জন্য দয়া করে Hosting Server Storage বা Pixeldrain সিলেক্ট করুন!"
                 );
               } catch (idbErr) {
                 console.error("Local IndexedDB store failed:", idbErr);
@@ -637,11 +758,35 @@ export default function VideoManagement() {
       // Handle Thumbnail File Upload
       const thumbFile = thumbFileRef.current?.files?.[0];
       if (thumbFile) {
-        if (data.uploadStorageType === 'firebase') {
+        if (data.uploadStorageType === 'server') {
+          try {
+            thumbnailUrl = await uploadToServer(thumbFile, 'thumbnails');
+          } catch (uploadErr: any) {
+            console.warn("Server upload blocked or failed for thumbnail. Falling back to local Base64/DataURL.", uploadErr);
+            try {
+              thumbnailUrl = await fileToBase64(thumbFile);
+            } catch (b64Err) {
+              console.error("Base64 conversion failed", b64Err);
+              throw new Error(`STORAGE_THUMBNAIL_FAILED: ${uploadErr?.message || 'Access Denied'}`);
+            }
+          }
+        } else if (data.uploadStorageType === 'firebase') {
           try {
             thumbnailUrl = await uploadFile(thumbFile, 'thumbnails');
           } catch (uploadErr: any) {
             console.warn("Firebase Storage upload blocked or failed for thumbnail. Falling back to local Base64/DataURL.", uploadErr);
+            try {
+              thumbnailUrl = await fileToBase64(thumbFile);
+            } catch (b64Err) {
+              console.error("Base64 conversion failed", b64Err);
+              throw new Error(`STORAGE_THUMBNAIL_FAILED: ${uploadErr?.message || 'Access Denied'}`);
+            }
+          }
+        } else if (data.uploadStorageType === 'pixeldrain') {
+          try {
+            thumbnailUrl = await uploadToPixeldrain(thumbFile, 'thumbnails');
+          } catch (uploadErr: any) {
+            console.warn("Pixeldrain upload blocked or failed for thumbnail. Falling back to local Base64/DataURL.", uploadErr);
             try {
               thumbnailUrl = await fileToBase64(thumbFile);
             } catch (b64Err) {
@@ -659,11 +804,33 @@ export default function VideoManagement() {
           }
         }
       } else if ((!thumbnailUrl || thumbnailUrl === '(Auto-generated from Video)') && autoThumbnailBlob) {
-        if (data.uploadStorageType === 'firebase') {
+        if (data.uploadStorageType === 'server') {
+          try {
+            thumbnailUrl = await uploadToServer(autoThumbnailBlob, 'thumbnails');
+          } catch (uploadErr: any) {
+            console.warn("Server upload blocked or failed for auto thumbnail. Falling back to local Base64/DataURL.", uploadErr);
+            try {
+              thumbnailUrl = await fileToBase64(autoThumbnailBlob);
+            } catch (b64Err) {
+              console.error("Base64 conversion failed for auto-thumbnail", b64Err);
+            }
+          }
+        } else if (data.uploadStorageType === 'firebase') {
           try {
             thumbnailUrl = await uploadFile(autoThumbnailBlob, 'thumbnails', 'auto_thumbnail.jpg');
           } catch (uploadErr: any) {
             console.warn("Firebase Storage upload blocked or failed for auto thumbnail. Falling back to local Base64/DataURL.", uploadErr);
+            try {
+              thumbnailUrl = await fileToBase64(autoThumbnailBlob);
+            } catch (b64Err) {
+              console.error("Base64 conversion failed for auto-thumbnail", b64Err);
+            }
+          }
+        } else if (data.uploadStorageType === 'pixeldrain') {
+          try {
+            thumbnailUrl = await uploadToPixeldrain(autoThumbnailBlob, 'thumbnails');
+          } catch (uploadErr: any) {
+            console.warn("Pixeldrain upload blocked or failed for auto thumbnail. Falling back to local Base64/DataURL.", uploadErr);
             try {
               thumbnailUrl = await fileToBase64(autoThumbnailBlob);
             } catch (b64Err) {
@@ -980,6 +1147,13 @@ export default function VideoManagement() {
                       <div className="min-w-0">
                         <h4 className="font-bold text-sm text-white line-clamp-1 group-hover:text-rose-500 transition-colors">{video.title}</h4>
                         <p className="text-xs text-neutral-500 line-clamp-1 mt-0.5">{video.description}</p>
+                        {video.videoUrl?.startsWith('indexeddb://') && (
+                          <div className="mt-1.5">
+                            <span className="inline-flex items-center gap-1 text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                              ⚠️ লোকাল ফাইল (অন্য ডিভাইসে চলবে না)
+                            </span>
+                          </div>
+                        )}
                         <div className="flex items-center gap-1.5 mt-2 overflow-x-auto whitespace-nowrap">
                           {video.tags?.slice(0, 3).map((tag, i) => (
                             <span key={i} className="text-[9px] font-medium px-2 py-0.5 bg-neutral-800 text-neutral-400 rounded-full border border-white/5">
@@ -1129,16 +1303,32 @@ export default function VideoManagement() {
                 <div className="space-y-2 md:col-span-2 bg-neutral-950/40 p-4 rounded-2xl border border-white/5">
                   <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest block mb-3">ফাইল আপলোড স্টোরেজ টাইপ (File Upload Storage Type)</label>
                   <p className="text-[11px] text-neutral-400 mb-2 leading-relaxed">
-                    সরাসরি ফাইল আপলোড করার সময় সেটি কোথায় সেভ হবে তা নির্বাচন করুন। লোকাল হোস্টিং/ফায়ারবেস ইরর এড়াতে <span className="font-bold text-emerald-400">Local Browser Storage</span> রিকমেন্ডেড!
+                    সরাসরি ফাইল আপলোড করার সময় সেটি কোথায় সেভ হবে তা নির্বাচন করুন। কোনো অ্যাকাউন্ট বা ফায়ারবেস ছাড়াই সম্পূর্ণ ফ্রিতে আনলিমিটেড হোস্টিং, সবার ফোনে ও সকল ডিভাইসে ভিডিও ১০০% প্লে করতে <span className="font-bold text-emerald-400">Hosting Server Storage (রিসোর্স/হোস্টিং স্টোরেজ - রিকমেন্ডেড!)</span> ব্যবহার করুন!
                   </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border text-xs font-bold uppercase cursor-pointer transition-all ${uploadStorageType === 'local' ? 'bg-emerald-600/10 border-emerald-500 text-white' : 'bg-neutral-800 border-white/5 text-neutral-400 hover:text-neutral-200'}`}>
-                      <input type="radio" value="local" {...register('uploadStorageType')} className="sr-only" />
-                      <span>Local Browser Storage (IndexedDB)</span>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                    <label className={`flex flex-col items-center justify-center text-center gap-1 p-3 rounded-xl border text-xs font-bold cursor-pointer transition-all ${uploadStorageType === 'server' ? 'bg-emerald-600/20 border-emerald-500 text-white shadow-lg shadow-emerald-500/5' : 'bg-neutral-800 border-white/5 text-neutral-400 hover:text-neutral-200'}`}>
+                      <input type="radio" value="server" {...register('uploadStorageType')} className="sr-only" />
+                      <span className="uppercase text-emerald-400 font-extrabold text-[9px] bg-emerald-500/10 px-2 py-0.5 rounded mb-1">👑 100% working & secure</span>
+                      <span>Hosting Server</span>
+                      <span className="text-[9px] font-normal text-neutral-500 mt-0.5">সবাই দেখতে পারবে (Public)</span>
                     </label>
-                    <label className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border text-xs font-bold uppercase cursor-pointer transition-all ${uploadStorageType === 'firebase' ? 'bg-rose-600/10 border-rose-500 text-white' : 'bg-neutral-800 border-white/5 text-neutral-400 hover:text-neutral-200'}`}>
+                    <label className={`flex flex-col items-center justify-center text-center gap-1 p-3 rounded-xl border text-xs font-bold cursor-pointer transition-all ${uploadStorageType === 'pixeldrain' ? 'bg-rose-600/10 border-rose-500/40 text-white' : 'bg-neutral-800 border-white/5 text-neutral-400 hover:text-neutral-200'}`}>
+                      <input type="radio" value="pixeldrain" {...register('uploadStorageType')} className="sr-only" />
+                      <span className="uppercase text-neutral-400 font-extrabold text-[9px] bg-white/5 px-2 py-0.5 rounded mb-1">⚡ Free Cloud</span>
+                      <span>Pixeldrain Storage</span>
+                      <span className="text-[9px] font-normal text-neutral-500 mt-0.5">সবাই দেখতে পারবে (Public)</span>
+                    </label>
+                    <label className={`flex flex-col items-center justify-center text-center gap-1 p-3 rounded-xl border text-xs font-bold cursor-pointer transition-all ${uploadStorageType === 'firebase' ? 'bg-amber-600/10 border-amber-500/40 text-white' : 'bg-neutral-800 border-white/5 text-neutral-400 hover:text-neutral-200'}`}>
                       <input type="radio" value="firebase" {...register('uploadStorageType')} className="sr-only" />
-                      <span>Firebase Cloud Storage</span>
+                      <span className="uppercase text-amber-400 font-extrabold text-[9px] bg-amber-500/10 px-2 py-0.5 rounded mb-1">🔥 Account Required</span>
+                      <span>Firebase Storage</span>
+                      <span className="text-[9px] font-normal text-neutral-500 mt-0.5">সবাই দেখতে পারবে (Public)</span>
+                    </label>
+                    <label className={`flex flex-col items-center justify-center text-center gap-1 p-3 rounded-xl border text-xs font-bold cursor-pointer transition-all ${uploadStorageType === 'local' ? 'bg-neutral-700/30 border-white/10 text-white' : 'bg-neutral-800 border-white/5 text-neutral-400 hover:text-neutral-200'}`}>
+                      <input type="radio" value="local" {...register('uploadStorageType')} className="sr-only" />
+                      <span className="uppercase text-neutral-500 font-extrabold text-[9px] bg-white/5 px-2 py-0.5 rounded mb-1">🔒 Offline test</span>
+                      <span>Local Browser</span>
+                      <span className="text-[9px] font-normal text-neutral-500 mt-0.5">শুধুমাত্র নিজের ফোনে (IndexedDB)</span>
                     </label>
                   </div>
                 </div>

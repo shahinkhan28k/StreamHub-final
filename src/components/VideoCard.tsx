@@ -98,6 +98,11 @@ const VideoCard: React.FC<{ video: Video }> = ({ video }) => {
                 {video.subCategoryId}
               </span>
             )}
+            {video.videoUrl?.startsWith('indexeddb://') && (
+              <span className="bg-amber-500/15 text-amber-500 border border-amber-500/20 px-2 py-0.5 rounded uppercase font-black tracking-wider text-[9px] animate-pulse">
+                ⚠️ Local File
+              </span>
+            )}
             <div className="flex items-center gap-1">
               <Eye className="w-3 h-3" />
               <span>{video.views.toLocaleString()}</span>
